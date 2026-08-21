@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AndyDefer\LaravelToth;
 
 use AndyDefer\ConsoleWriter\Console\Console;
+use AndyDefer\ConsoleWriter\Utils\ProgressManager;
 use AndyDefer\LaravelToth\Configs\TothConfig;
 use AndyDefer\LaravelToth\Contracts\Configs\TothConfigInterface;
 use AndyDefer\LaravelToth\Contracts\Services\ArchiveServiceInterface;
@@ -14,7 +15,6 @@ use AndyDefer\LaravelToth\Observers\ArchiveObserver;
 use AndyDefer\LaravelToth\Repositories\ArchiveRepository;
 use AndyDefer\LaravelToth\Services\ArchiveService;
 use AndyDefer\LaravelToth\Services\DiscoveryService;
-use AndyDefer\LaravelToth\Utils\ProgressManager;
 use AndyDefer\PhpServices\Contracts\FileSystemInterface;
 use AndyDefer\PhpServices\Services\FileSystemService;
 use AndyDefer\Task\Contracts\Services\UniqueTaskServiceInterface;

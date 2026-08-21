@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AndyDefer\LaravelToth\Services;
 
+use AndyDefer\ConsoleWriter\Utils\ProgressManager;
 use AndyDefer\DomainStructures\Utils\StrictDataObject;
 use AndyDefer\LaravelToth\Contracts\Configs\TothConfigInterface;
 use AndyDefer\LaravelToth\Contracts\Services\ArchiveServiceInterface;
@@ -15,7 +16,6 @@ use AndyDefer\LaravelToth\Tasks\BackupArchiveTask;
 use AndyDefer\LaravelToth\Tasks\RestoreArchiveTask;
 use AndyDefer\LaravelToth\Tasks\UpdateOrCreateArchiveTask;
 use AndyDefer\LaravelToth\Tasks\UpdateOrCreateFromFileTask;
-use AndyDefer\LaravelToth\Utils\ProgressManager;
 use AndyDefer\Repository\Records\FindByRecord;
 use AndyDefer\Task\Contracts\Services\UniqueTaskServiceInterface;
 use AndyDefer\Task\Models\UniqueTask;

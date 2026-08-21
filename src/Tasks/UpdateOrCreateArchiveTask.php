@@ -37,7 +37,6 @@ final class UpdateOrCreateArchiveTask extends AbstractUniqueTask
         $archiveRepository = $this->context->getLaravelApp()->make(ArchiveRepository::class);
         $backupHelper = $this->context->getLaravelApp()->make(BackupFileHelper::class);
 
-        // Récupérer toutes les colonnes brutes de la table
         $rawData = DB::table($model->getTable())->where($model->getKeyName(), $model->getKey())->first();
 
         if (! $rawData) {
@@ -45,7 +44,6 @@ final class UpdateOrCreateArchiveTask extends AbstractUniqueTask
             throw new RuntimeException("Failed to fetch raw data for {$modelClass}:{$modelId}");
         }
 
-        // Convertir en tableau et retirer la clé primaire si elle est auto-incrémentée
         $data = (array) $rawData;
 
         $archive = $archiveRepository->updateOrCreate(
