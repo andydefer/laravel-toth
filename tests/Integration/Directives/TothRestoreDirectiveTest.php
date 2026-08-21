@@ -29,9 +29,14 @@ final class TothRestoreDirectiveTest extends IntegrationTestCase
 
     private TothConfigInterface $config;
 
+    private int $originalOutputBufferingLevel;
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        // ✅ Démarrer l'obfuscation de la sortie
+        $this->startOutputBuffering();
 
         Carbon::setTestNow(Carbon::create(2026, 7, 26, 12, 0, 0));
 
@@ -68,7 +73,34 @@ final class TothRestoreDirectiveTest extends IntegrationTestCase
             File::deleteDirectory($backupPath);
         }
 
+        // ✅ Capturer la sortie
+        $this->captureOutput();
+
         parent::tearDown();
+    }
+
+    /**
+     * Démarre l'obfuscation de la sortie pour les barres de progression.
+     */
+    private function startOutputBuffering(): void
+    {
+        $this->originalOutputBufferingLevel = ob_get_level();
+
+        if (! ob_get_level()) {
+            ob_start();
+        }
+    }
+
+    /**
+     * Capture et supprime la sortie des barres de progression.
+     */
+    private function captureOutput(): void
+    {
+        if (ob_get_level() > $this->originalOutputBufferingLevel) {
+            ob_end_clean();
+        } elseif (ob_get_level() > 0) {
+            ob_clean();
+        }
     }
 
     private function runTasks(): void
@@ -281,5 +313,244 @@ final class TothRestoreDirectiveTest extends IntegrationTestCase
 
         $restored = TestUser::find($userId);
         $this->assertNull($restored);
+    }
+
+    // ============================================================
+    // TESTS POUR LE FLAG --mute
+    // ============================================================
+
+    public function test_restore_with_mute_flag_disables_progress_bars(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Restore User',
+            'email' => 'muterestore@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->createBackup();
+
+        $userId = $user->id;
+        $user->delete();
+
+        // ✅ Réactiver le buffering pour capturer la sortie
+        $this->captureOutput();
+        $this->startOutputBuffering();
+
+        $response = $this->service->run('toth:restore --mute');
+
+        $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
+
+        // ✅ Vérifier que la barre de progression n'est PAS affichée
+        $this->assertStringNotContainsString('[████████', $response->output);
+        $this->assertStringNotContainsString('Restoring from database', $response->output);
+
+        $this->runTasks();
+
+        $restored = TestUser::find($userId);
+        $this->assertNotNull($restored);
+        $this->assertEquals('Mute Restore User', $restored->name);
+        $this->assertEquals('muterestore@example.com', $restored->email);
+    }
+
+    public function test_restore_with_mute_and_only_files_flag(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Files Restore User',
+            'email' => 'mutefilesrestore@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->createBackup();
+
+        $backupPath = $this->config->getBackupFolderPath();
+        $filePath = $backupPath.'/test_users/'.$user->id.'.php';
+        $this->assertTrue(File::exists($filePath));
+
+        $filters = ArchiveFiltersRecord::from([
+            'table_name' => 'test_users',
+            'row_id' => (string) $user->id,
+        ]);
+
+        $archive = $this->archiveRepository->findBy(
+            new FindByRecord(
+                filters: $filters
+            )
+        )->first();
+
+        if ($archive) {
+            $this->archiveRepository->delete($archive->id);
+        }
+
+        $archives = $this->archiveRepository->findBy(
+            new FindByRecord(
+                filters: $filters
+            )
+        );
+        $this->assertCount(0, $archives);
+
+        $userId = $user->id;
+        $user->delete();
+
+        // ✅ Réactiver le buffering pour capturer la sortie
+        $this->captureOutput();
+        $this->startOutputBuffering();
+
+        $response = $this->service->run('toth:restore --only-files --mute');
+
+        $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
+
+        // ✅ Vérifier que la barre de progression n'est PAS affichée
+        $this->assertStringNotContainsString('[████████', $response->output);
+        $this->assertStringNotContainsString('Restoring from files', $response->output);
+
+        $this->runTasks();
+
+        $restored = TestUser::find($userId);
+        $this->assertNotNull($restored);
+        $this->assertEquals('Mute Files Restore User', $restored->name);
+        $this->assertEquals('mutefilesrestore@example.com', $restored->email);
+    }
+
+    public function test_restore_with_mute_and_only_db_flag(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute DB Restore User',
+            'email' => 'mutedbrestore@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->createBackup();
+
+        $userId = $user->id;
+        $user->delete();
+
+        // ✅ Réactiver le buffering pour capturer la sortie
+        $this->captureOutput();
+        $this->startOutputBuffering();
+
+        $response = $this->service->run('toth:restore --only-db --mute');
+
+        $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
+
+        // ✅ Vérifier que la barre de progression n'est PAS affichée
+        $this->assertStringNotContainsString('[████████', $response->output);
+        $this->assertStringNotContainsString('Restoring from database', $response->output);
+
+        $this->runTasks();
+
+        $restored = TestUser::find($userId);
+        $this->assertNotNull($restored);
+        $this->assertEquals('Mute DB Restore User', $restored->name);
+        $this->assertEquals('mutedbrestore@example.com', $restored->email);
+    }
+
+    public function test_restore_with_mute_and_specific_tables(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Specific Restore User',
+            'email' => 'mutespecificrestore@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->createBackup();
+
+        $userId = $user->id;
+        $user->delete();
+
+        // ✅ Réactiver le buffering pour capturer la sortie
+        $this->captureOutput();
+        $this->startOutputBuffering();
+
+        $response = $this->service->run('toth:restore [test_users] --mute');
+
+        $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
+
+        // ✅ Vérifier que la barre de progression n'est PAS affichée
+        $this->assertStringNotContainsString('[████████', $response->output);
+        $this->assertStringNotContainsString('Restoring from database', $response->output);
+
+        $this->runTasks();
+
+        $restored = TestUser::find($userId);
+        $this->assertNotNull($restored);
+        $this->assertEquals('Mute Specific Restore User', $restored->name);
+        $this->assertEquals('mutespecificrestore@example.com', $restored->email);
+    }
+
+    public function test_restore_with_mute_and_alias(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Alias Restore User',
+            'email' => 'mutealiasrestore@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->createBackup();
+
+        $userId = $user->id;
+        $user->delete();
+
+        // ✅ Réactiver le buffering pour capturer la sortie
+        $this->captureOutput();
+        $this->startOutputBuffering();
+
+        $response = $this->service->run('restore --mute');
+
+        $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
+
+        // ✅ Vérifier que la barre de progression n'est PAS affichée
+        $this->assertStringNotContainsString('[████████', $response->output);
+        $this->assertStringNotContainsString('Restoring from database', $response->output);
+
+        $this->runTasks();
+
+        $restored = TestUser::find($userId);
+        $this->assertNotNull($restored);
+        $this->assertEquals('Mute Alias Restore User', $restored->name);
+        $this->assertEquals('mutealiasrestore@example.com', $restored->email);
+    }
+
+    public function test_restore_with_mute_does_not_affect_functionality(): void
+    {
+        $user1 = TestUser::create([
+            'name' => 'Mute Restore One',
+            'email' => 'muterestoreone@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $user2 = TestUser::create([
+            'name' => 'Mute Restore Two',
+            'email' => 'muterestoretwo@example.com',
+            'status' => 'active',
+            'role' => 'admin',
+        ]);
+
+        $this->createBackup();
+
+        $userId1 = $user1->id;
+        $user1->delete();
+
+        $userId2 = $user2->id;
+        $user2->delete();
+
+        $response = $this->service->run('toth:restore --mute');
+
+        $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
+
+        $this->runTasks();
+
+        $restored1 = TestUser::find($userId1);
+        $this->assertNotNull($restored1);
+        $this->assertEquals('Mute Restore One', $restored1->name);
+
+        $restored2 = TestUser::find($userId2);
+        $this->assertNotNull($restored2);
+        $this->assertEquals('Mute Restore Two', $restored2->name);
     }
 }

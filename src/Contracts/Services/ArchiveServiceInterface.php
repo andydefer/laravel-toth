@@ -76,4 +76,21 @@ interface ArchiveServiceInterface
      * This enables automatic archiving on model events.
      */
     public function registerObservers(): void;
+
+    /**
+     * Sets the mute mode for progress display.
+     *
+     * When mute is enabled, progress bars will not be displayed during
+     * long-running operations like backup and restore.
+     *
+     * @param  bool  $mute  If true, progress bars will be suppressed
+     */
+    public function setMute(bool $mute): self;
+
+    /**
+     * Checks if mute mode is currently enabled.
+     *
+     * @return bool True if mute mode is enabled, false otherwise
+     */
+    public function isMuted(): bool;
 }

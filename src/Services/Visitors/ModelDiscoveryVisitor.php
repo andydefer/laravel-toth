@@ -93,19 +93,28 @@ final class ModelDiscoveryVisitor extends NodeVisitorAbstract
      */
     private function isEloquentModelParent(string $parentName): bool
     {
-        if ($parentName === Model::class) {
+        $resolvedParentName = $parentName;
+
+        foreach ($this->aliases as $alias => $fqcn) {
+            if ($parentName === $alias) {
+                $resolvedParentName = $fqcn;
+                break;
+            }
+        }
+
+        if ($resolvedParentName === Model::class) {
             return true;
         }
 
-        foreach ($this->aliases as $alias => $fqcn) {
-            if ($parentName === $alias && $fqcn === Model::class) {
+        if (class_exists($resolvedParentName)) {
+            $parents = class_parents($resolvedParentName);
+
+            if ($parents !== false && in_array(Model::class, $parents, true)) {
                 return true;
             }
         }
 
-        $lastPart = substr($parentName, strrpos($parentName, '\\') + 1);
-
-        return $lastPart === 'Model';
+        return false;
     }
 
     /**

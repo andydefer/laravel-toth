@@ -2,7 +2,7 @@
 
 ## Description
 
-Commande CLI qui déclenche la création de sauvegardes pour les modèles configurables. Permet de filtrer par tables et de choisir la source (base de données ou fichiers de stockage).
+Commande CLI qui déclenche la création de sauvegardes pour les modèles configurables. Permet de filtrer par tables, de choisir la source (base de données ou fichiers de stockage) et de désactiver les barres de progression.
 
 ## Hiérarchie
 
@@ -15,11 +15,11 @@ AbstractDirective
 
 ## Rôle principal
 
-Orchestrer le processus de sauvegarde en fonction des paramètres de l'utilisateur. La directive interroge la configuration, résout les tables à sauvegarder, et délègue au `ArchiveService` l'exécution des sauvegardes depuis la base de données ou les fichiers de stockage.
+Orchestrer le processus de sauvegarde en fonction des paramètres de l'utilisateur. La directive interroge la configuration, résout les tables à sauvegarder, applique le mode `mute` si demandé, et délègue au `ArchiveService` l'exécution des sauvegardes depuis la base de données ou les fichiers de stockage.
 
 ## Installation
 
-Cette directive est automatiquement enregistrée lorsque le package est installé via le `LaravelTothServiceProvider`.
+Cette directive est automatiquement enregistrée via le `LaravelTothServiceProvider`.
 
 ```bash
 composer require andydefer/laravel-toth
@@ -37,7 +37,8 @@ public function getSignature(): string
     return 'toth:backup 
                 {tables*}#"Tables to backup (e.g., users, posts)" 
                 {--only-files}#"Backup only from storage files" 
-                {--only-db}#"Backup only from database"';
+                {--only-db}#"Backup only from database"
+                {--mute}#"Disable progress bars"';
 }
 ```
 
@@ -45,7 +46,7 @@ public function getSignature(): string
 
 **Exemple :**
 ```bash
-./bin/task toth:backup [users,posts] --only-db
+./bin/task toth:backup [users,posts] --only-db --mute
 ```
 
 ---
@@ -80,8 +81,8 @@ public function getAliases(): StringTypedCollection
 
 **Exemple :**
 ```bash
-./bin/task backup [users,posts]
-./bin/task bkp [users,posts]
+./bin/task backup [users,posts] --mute
+./bin/task bkp [users,posts] --only-files
 ```
 
 ---
@@ -94,7 +95,8 @@ Point d'entrée de la commande. Orchestre le processus de sauvegarde.
 |-------|--------|
 | 1 | Récupère les tables depuis l'entrée utilisateur |
 | 2 | Vérifie les flags mutuellement exclusifs |
-| 3 | Délègue au `ArchiveService` la sauvegarde appropriée |
+| 3 | Applique le mode `mute` au service |
+| 4 | Délègue au `ArchiveService` la sauvegarde appropriée |
 
 **Retourne :** `ExitCode` - `SUCCESS` ou `INVALID_ARGUMENT`
 
@@ -102,7 +104,6 @@ Point d'entrée de la commande. Orchestre le processus de sauvegarde.
 
 **Exemple :**
 ```php
-// Usage complet
 $directive = new TothBackupDirective();
 $exitCode = $directive->execute();
 ```
@@ -122,22 +123,24 @@ $exitCode = $directive->execute();
 **Comportement :**
 1. Récupère tous les modèles de la configuration `toth.archivables`
 2. Sauvegarde en base de données ET en fichiers de stockage
+3. Affiche la barre de progression (par défaut)
 
 ---
 
-### Cas 2 : Sauvegarde uniquement depuis la base de données
+### Cas 2 : Sauvegarde sans barre de progression
 
-**Problème :** L'utilisateur souhaite recréer les archives en base de données sans toucher aux fichiers de stockage.
+**Problème :** L'utilisateur souhaite une sauvegarde silencieuse pour une exécution en cron.
 
-**Solution :** Utiliser le flag `--only-db`.
+**Solution :** Utiliser le flag `--mute`.
 
 ```bash
-./bin/task toth:backup --only-db
+./bin/task toth:backup --mute
 ```
 
 **Comportement :**
-1. Récupère tous les modèles de la configuration
-2. Sauvegarde UNIQUEMENT en base de données
+1. Toutes les barres de progression sont désactivées
+2. Les sauvegardes sont exécutées en arrière-plan
+3. Idéal pour les environnements de production ou les cron jobs
 
 ---
 
@@ -154,6 +157,7 @@ $exitCode = $directive->execute();
 **Comportement :**
 1. Filtre uniquement les tables `users` et `posts`
 2. Sauvegarde UNIQUEMENT depuis les fichiers de stockage
+3. Les barres de progression sont affichées
 
 ---
 
@@ -164,9 +168,26 @@ $exitCode = $directive->execute();
 **Solution :** Utiliser l'alias `backup` ou `bkp`.
 
 ```bash
-./bin/task backup [users,posts]
-./bin/task bkp [users,posts]
+./bin/task backup [users,posts] --mute
+./bin/task bkp [users,posts] --only-files
 ```
+
+---
+
+### Cas 5 : Sauvegarde complète en mode silencieux
+
+**Problème :** L'utilisateur souhaite une sauvegarde complète sans aucune sortie.
+
+**Solution :** Combiner `--mute` avec les autres flags.
+
+```bash
+./bin/task toth:backup [users,posts] --only-db --mute
+```
+
+**Comportement :**
+1. Sauvegarde UNIQUEMENT depuis la base de données
+2. Aucune barre de progression n'est affichée
+3. Parfait pour les scripts automatisés
 
 ## Flux d'exécution
 
@@ -180,6 +201,12 @@ getTablesFromInput()
 Vérification des flags mutuellement exclusifs
     ├── --only-files ET --only-db → Erreur
     └── Sinon → continuer
+    ↓
+Récupération du ArchiveService
+    ↓
+Application du mode mute
+    ├── --mute présent → setMute(true)
+    └── Sinon → setMute(false)
     ↓
 Résolution du mode de sauvegarde
     ├── --only-files → backupFromFiles()
@@ -206,7 +233,8 @@ Return ExitCode::SUCCESS
 La directive utilise `ArchiveService` pour exécuter les opérations de sauvegarde.
 
 ```php
-$archiveService = $this->getApplication()->make(ArchiveService::class);
+$archiveService = $this->getApplication()->make(ArchiveServiceInterface::class);
+$archiveService->setMute($mute);
 $archiveService->backupFromModels($tables);
 ```
 
@@ -237,10 +265,12 @@ $this->getConsole()->raw(KeyValue::renderWithValueColor(
 | Récupération des tables | O(n) | Dépend du nombre de modèles configurés |
 | Résolution des flags | O(1) | Négligeable |
 | Sauvegarde | O(n) | Délégue au `ArchiveService` |
+| Mode mute | O(1) | Négligeable (désactive l'affichage) |
 
 **Optimisations :**
 - Les tâches de sauvegarde sont asynchrones (via `laravel-task`)
 - Aucune opération bloquante dans la directive
+- Le mode `mute` réduit la surcharge d'affichage
 
 ## Compatibilité
 
@@ -269,11 +299,12 @@ $app->singleton(ArchiveService::class, function () {
     return new ArchiveService(
         config: $app->make(TothConfigInterface::class),
         taskService: $app->make(UniqueTaskServiceInterface::class),
-        archiveRepository: $app->make(ArchiveRepository::class)
+        archiveRepository: $app->make(ArchiveRepository::class),
+        progress: $app->make(ProgressManager::class),
     );
 });
 
-// Exécution de la directive
+// Exécution de la directive avec mode mute
 $directive = new TothBackupDirective();
 $exitCode = $directive->execute();
 
@@ -289,4 +320,4 @@ if ($exitCode === ExitCode::SUCCESS) {
 - `TothRestoreDirective` - Commande de restauration
 - `ArchiveService` - Service d'archivage et de sauvegarde
 - `TothConfigInterface` - Interface de configuration
-- `BackupFileHelper` - Helper de création de fichiers de backup
+- `ProgressManager` - Gestionnaire de barres de progression

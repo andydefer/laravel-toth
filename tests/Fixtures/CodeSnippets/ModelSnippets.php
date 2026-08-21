@@ -189,4 +189,130 @@ class Order extends Model
     ];
 }
 PHP;
+
+    public const MODEL_EXTENDING_LARAVEL_USER = <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Database\Eloquent\Model;
+
+class User extends Authenticatable
+{
+    protected $table = 'users';
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+}
+PHP;
+
+    public const CUSTOM_BASE_CLASS_EXTENDING_MODEL = <<<'PHP'
+<?php
+
+namespace App\Base;
+
+use Illuminate\Database\Eloquent\Model;
+
+class BaseModel extends Model
+{
+    // Base model class that extends Eloquent Model
+}
+PHP;
+
+    public const MODEL_WITH_CUSTOM_BASE_CLASS = <<<'PHP'
+<?php
+
+namespace AndyDefer\LaravelToth\Tests\Fixtures\Models;
+
+use AndyDefer\LaravelToth\Tests\Fixtures\Base\BaseModel;
+
+class Product extends BaseModel
+{
+    protected $table = 'products';
+}
+PHP;
+
+    public const MODEL_EXTENDING_NATIVE_USER = <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Illuminate\Foundation\Auth\User as ModelAuthenticatable;
+
+final class User extends ModelAuthenticatable
+{
+    protected $table = 'users';
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+    ];
+}
+PHP;
+
+    public const USER_MODEL_WITH_ALL_FEATURES = <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+
+final class User extends Authenticatable
+{
+    use Notifiable;
+    use SoftDeletes;
+
+    protected $table = 'users';
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'email_verified_at',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
+    ];
+
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
+    }
+}
+PHP;
+
+    public const CLASS_WITH_MODEL_IN_NAME_BUT_NOT_MODEL = <<<'PHP'
+<?php
+
+namespace App\Services;
+
+class ViewModel
+{
+    public function getData(): array
+    {
+        return [];
+    }
+}
+PHP;
 }

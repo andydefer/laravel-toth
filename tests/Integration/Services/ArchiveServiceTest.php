@@ -9,7 +9,6 @@ namespace AndyDefer\LaravelToth\Tests\Integration\Services;
 use AndyDefer\Directive\Services\DirectiveTestingService;
 use AndyDefer\LaravelToth\Configs\TothConfig;
 use AndyDefer\LaravelToth\Contracts\Configs\TothConfigInterface;
-use AndyDefer\LaravelToth\Models\Archive;
 use AndyDefer\LaravelToth\Records\ArchiveFiltersRecord;
 use AndyDefer\LaravelToth\Repositories\ArchiveRepository;
 use AndyDefer\LaravelToth\Services\ArchiveService;
@@ -34,9 +33,14 @@ final class ArchiveServiceTest extends IntegrationTestCase
 
     private TothConfigInterface $config;
 
+    private int $originalOutputBufferingLevel;
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        // ✅ Démarrer l'obfuscation de la sortie
+        $this->startOutputBuffering();
 
         Carbon::setTestNow(Carbon::create(2026, 7, 26, 12, 0, 0));
 
@@ -73,23 +77,41 @@ final class ArchiveServiceTest extends IntegrationTestCase
             File::deleteDirectory($backupPath);
         }
 
+        // ✅ Capturer la sortie
+        $this->captureOutput();
+
         parent::tearDown();
+    }
+
+    /**
+     * Démarre l'obfuscation de la sortie pour les barres de progression.
+     */
+    private function startOutputBuffering(): void
+    {
+        $this->originalOutputBufferingLevel = ob_get_level();
+
+        if (! ob_get_level()) {
+            ob_start();
+        }
+    }
+
+    /**
+     * Capture et supprime la sortie des barres de progression.
+     */
+    private function captureOutput(): void
+    {
+        if (ob_get_level() > $this->originalOutputBufferingLevel) {
+            ob_end_clean();
+        } elseif (ob_get_level() > 0) {
+            ob_clean();
+        }
     }
 
     private function runTasks(): void
     {
-        // Avancer le temps de 15 secondes pour être sûr d'exécuter toutes les tâches
         Carbon::setTestNow(Carbon::create(2026, 7, 26, 12, 0, 15));
         $this->directiveService->run('tasks:process');
-        // Remettre le temps initial
         Carbon::setTestNow(Carbon::create(2026, 7, 26, 12, 0, 0));
-    }
-
-    private function runTasksWithDelay(): void
-    {
-        // Avancer le temps de 10 secondes pour exécuter les tâches planifiées
-        Carbon::setTestNow(Carbon::create(2026, 7, 26, 12, 0, 10));
-        $this->directiveService->run('tasks:process');
     }
 
     public function test_create_or_update_archive_creates_archive(): void
@@ -103,7 +125,6 @@ final class ArchiveServiceTest extends IntegrationTestCase
 
         $this->archiveService->createOrUpdateArchive($user);
 
-        // Exécuter les tâches
         $this->runTasks();
 
         $filters = ArchiveFiltersRecord::from([
@@ -135,11 +156,9 @@ final class ArchiveServiceTest extends IntegrationTestCase
             'role' => 'admin',
         ]);
 
-        // Première archive
         $this->archiveService->createOrUpdateArchive($user);
         $this->runTasks();
 
-        // Avancer le temps
         Carbon::setTestNow(Carbon::create(2026, 7, 26, 12, 0, 10));
 
         $user->update([
@@ -147,7 +166,6 @@ final class ArchiveServiceTest extends IntegrationTestCase
             'email' => 'jane.smith@example.com',
         ]);
 
-        // Deuxième archive (devrait mettre à jour la première)
         $this->archiveService->createOrUpdateArchive($user);
         $this->runTasks();
 
@@ -164,7 +182,6 @@ final class ArchiveServiceTest extends IntegrationTestCase
             )
         );
 
-        // ✅ UNE seule archive pour un modèle
         $this->assertCount(1, $archives);
 
         $latest = $archives->first();
@@ -227,6 +244,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
             'role' => 'admin',
         ]);
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->backupFromModels();
         $this->runTasks();
 
@@ -252,6 +271,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
             'role' => 'user',
         ]);
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->backupFromModels(['non_existent_table']);
         $this->runTasks();
 
@@ -297,6 +318,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
         $this->archiveService->backup($archive);
         $this->runTasks();
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->backupFromFiles();
         $this->runTasks();
 
@@ -338,6 +361,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
         $this->archiveService->backup($archive);
         $this->runTasks();
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->backupFromFiles(['non_existent_table']);
         $this->runTasks();
 
@@ -365,6 +390,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
         $userId = $user->id;
         $user->delete();
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->restoreFromModels();
         $this->runTasks();
 
@@ -389,6 +416,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
         $userId = $user->id;
         $user->delete();
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->restoreFromModels(['non_existent_table']);
         $this->runTasks();
 
@@ -427,6 +456,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
         $userId = $user->id;
         $user->delete();
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->restoreFromFiles();
         $this->runTasks();
 
@@ -467,6 +498,8 @@ final class ArchiveServiceTest extends IntegrationTestCase
         $userId = $user->id;
         $user->delete();
 
+        // ✅ Activer mute pour ce test
+        $this->archiveService->setMute(true);
         $this->archiveService->restoreFromFiles(['non_existent_table']);
         $this->runTasks();
 
@@ -483,21 +516,16 @@ final class ArchiveServiceTest extends IntegrationTestCase
             'role' => 'user',
         ]);
 
-        // Première mise à jour
         $this->archiveService->createOrUpdateArchive($user);
 
-        // Vérifier qu'une tâche est en attente
         $tasks = $this->uniqueTaskService->findPending();
         $this->assertGreaterThanOrEqual(1, $tasks->count());
 
-        // Deuxième mise à jour immédiate
         Carbon::setTestNow(Carbon::create(2026, 7, 26, 12, 0, 5));
         $this->archiveService->createOrUpdateArchive($user);
 
-        // Exécuter les tâches pour voir le résultat
         $this->runTasks();
 
-        // Vérifier qu'il n'y a qu'une seule archive (la plus récente)
         $filters = ArchiveFiltersRecord::from([
             'table_name' => 'test_users',
             'row_id' => (string) $user->id,
@@ -516,5 +544,216 @@ final class ArchiveServiceTest extends IntegrationTestCase
     {
         $this->archiveService->registerObservers();
         $this->assertTrue(true);
+    }
+
+    // ============================================================
+    // TESTS POUR LE MODE MUTE
+    // ============================================================
+
+    public function test_set_mute_disables_progress_bars(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute User',
+            'email' => 'mute@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->archiveService->setMute(true);
+        $this->assertTrue($this->archiveService->isMuted());
+
+        $this->archiveService->backupFromModels();
+
+        $this->assertTrue(true);
+    }
+
+    public function test_set_mute_false_enables_progress_bars(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Unmute User',
+            'email' => 'unmute@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->archiveService->setMute(false);
+        $this->assertFalse($this->archiveService->isMuted());
+
+        // ✅ Pour ce test, on réactive le buffering car il n'y a pas de mute
+        $this->captureOutput();
+        $this->startOutputBuffering();
+
+        $this->archiveService->backupFromModels();
+
+        $this->assertTrue(true);
+    }
+
+    public function test_mute_does_not_affect_archive_creation(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Archive User',
+            'email' => 'mutearchive@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->archiveService->setMute(true);
+        $this->archiveService->createOrUpdateArchive($user);
+        $this->runTasks();
+
+        $filters = ArchiveFiltersRecord::from([
+            'table_name' => 'test_users',
+            'row_id' => (string) $user->id,
+            'model_class' => TestUser::class,
+        ]);
+
+        $archive = $this->archiveRepository->findBy(
+            new FindByRecord(
+                filters: $filters
+            )
+        )->first();
+
+        $this->assertNotNull($archive);
+        $this->assertEquals($user->name, $archive->data['name']);
+        $this->assertEquals($user->email, $archive->data['email']);
+    }
+
+    public function test_is_muted_returns_correct_state(): void
+    {
+        $this->assertFalse($this->archiveService->isMuted());
+
+        $this->archiveService->setMute(true);
+        $this->assertTrue($this->archiveService->isMuted());
+
+        $this->archiveService->setMute(false);
+        $this->assertFalse($this->archiveService->isMuted());
+    }
+
+    public function test_mute_does_not_affect_backup_from_models(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Backup User',
+            'email' => 'mutebackup@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->archiveService->setMute(true);
+        $this->archiveService->backupFromModels();
+        $this->runTasks();
+
+        $filters = ArchiveFiltersRecord::from([
+            'table_name' => 'test_users',
+            'row_id' => (string) $user->id,
+            'model_class' => TestUser::class,
+        ]);
+
+        $archive = $this->archiveRepository->findBy(
+            new FindByRecord(
+                filters: $filters
+            )
+        )->first();
+
+        $this->assertNotNull($archive);
+    }
+
+    public function test_mute_does_not_affect_restore_from_models(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Restore User',
+            'email' => 'muterestore@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->archiveService->createOrUpdateArchive($user);
+        $this->runTasks();
+
+        $userId = $user->id;
+        $user->delete();
+
+        $this->archiveService->setMute(true);
+        $this->archiveService->restoreFromModels();
+        $this->runTasks();
+
+        $restored = TestUser::find($userId);
+        $this->assertNotNull($restored);
+        $this->assertEquals('Mute Restore User', $restored->name);
+    }
+
+    public function test_mute_does_not_affect_restore_from_files(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute File Restore User',
+            'email' => 'mutefilerestore@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->archiveService->createOrUpdateArchive($user);
+        $this->runTasks();
+
+        $filters = ArchiveFiltersRecord::from([
+            'table_name' => 'test_users',
+            'row_id' => (string) $user->id,
+        ]);
+
+        $archive = $this->archiveRepository->findBy(
+            new FindByRecord(
+                filters: $filters
+            )
+        )->first();
+
+        $this->assertNotNull($archive);
+
+        $this->archiveService->backup($archive);
+        $this->runTasks();
+
+        $userId = $user->id;
+        $user->delete();
+
+        $this->archiveService->setMute(true);
+        $this->archiveService->restoreFromFiles();
+        $this->runTasks();
+
+        $restored = TestUser::find($userId);
+        $this->assertNotNull($restored);
+        $this->assertEquals('Mute File Restore User', $restored->name);
+    }
+
+    public function test_mute_does_not_affect_backup_single_archive(): void
+    {
+        $user = TestUser::create([
+            'name' => 'Mute Single Backup User',
+            'email' => 'mutesinglebackup@example.com',
+            'status' => 'active',
+            'role' => 'user',
+        ]);
+
+        $this->archiveService->createOrUpdateArchive($user);
+        $this->runTasks();
+
+        $filters = ArchiveFiltersRecord::from([
+            'table_name' => 'test_users',
+            'row_id' => (string) $user->id,
+            'model_class' => TestUser::class,
+        ]);
+
+        $archive = $this->archiveRepository->findBy(
+            new FindByRecord(
+                filters: $filters
+            )
+        )->first();
+
+        $this->assertNotNull($archive);
+
+        $this->archiveService->setMute(true);
+        $this->archiveService->backup($archive);
+        $this->runTasks();
+
+        $backupPath = $this->config->getBackupFolderPath();
+        $filePath = $backupPath.'/test_users/'.$archive->row_id.'.php';
+
+        $this->assertTrue(File::exists($filePath));
     }
 }

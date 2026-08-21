@@ -10,6 +10,7 @@ use AndyDefer\Directive\Enums\ExitCode;
 use AndyDefer\Directive\Services\DirectiveTestingService;
 use AndyDefer\LaravelToth\Directives\TothDiscoveryDirective;
 use AndyDefer\LaravelToth\Tests\Fixtures\CodeSnippets\ConfigSnippets;
+use AndyDefer\LaravelToth\Tests\Fixtures\Models\Product;
 use AndyDefer\LaravelToth\Tests\Fixtures\Models\TestProduct;
 use AndyDefer\LaravelToth\Tests\Fixtures\Models\TestUser;
 use AndyDefer\LaravelToth\Tests\IntegrationTestCase;
@@ -65,13 +66,10 @@ final class TothDiscoveryDirectiveTest extends IntegrationTestCase
 
     public function test_discover_with_default_source(): void
     {
-        // Arrange
         $this->resetConfig();
 
-        // Act
         $response = $this->service->run('toth:discover');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
         $this->assertStringContainsString('Starting model discovery', $response->output);
         $this->assertStringContainsString('No sources specified, using default: app.Models', $response->output);
@@ -79,106 +77,88 @@ final class TothDiscoveryDirectiveTest extends IntegrationTestCase
 
     public function test_discover_with_fixtures_source(): void
     {
-        // Arrange
         $this->resetConfig();
 
-        // Act
         $response = $this->service->run('toth:discover [tests.Fixtures.Models]');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
-        $this->assertStringContainsString('Found 2 Eloquent models', $response->output);
+        $this->assertStringContainsString('Found 3 Eloquent models', $response->output);
         $this->assertStringContainsString(TestUser::class, $response->output);
         $this->assertStringContainsString(TestProduct::class, $response->output);
+        $this->assertStringContainsString(Product::class, $response->output);
 
         $archivables = Config::get('toth.archivables', []);
         $this->assertContains(TestUser::class, $archivables);
         $this->assertContains(TestProduct::class, $archivables);
+        $this->assertContains(Product::class, $archivables);
     }
 
     public function test_discover_with_multiple_sources(): void
     {
-        // Arrange
         $this->resetConfig();
 
-        // Act
         $response = $this->service->run('toth:discover [tests.Fixtures.Models, app.Models]');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
         $this->assertStringContainsString('Found', $response->output);
     }
 
     public function test_discover_with_invalid_source_returns_no_models(): void
     {
-        // Arrange
         $this->resetConfig();
 
-        // Act
         $response = $this->service->run('toth:discover [invalid.path]');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
         $this->assertStringContainsString('No Eloquent models found', $response->output);
     }
 
     public function test_discover_merges_with_existing_configuration(): void
     {
-        // Arrange
         $this->resetConfig();
         Config::set('toth.archivables', ['App\\Models\\ExistingModel']);
 
-        // Act
         $response = $this->service->run('toth:discover [tests.Fixtures.Models]');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
 
         $archivables = Config::get('toth.archivables', []);
         $this->assertContains('App\\Models\\ExistingModel', $archivables);
         $this->assertContains(TestUser::class, $archivables);
         $this->assertContains(TestProduct::class, $archivables);
+        $this->assertContains(Product::class, $archivables);
     }
 
     public function test_discover_with_alias(): void
     {
-        // Arrange
         $this->resetConfig();
 
-        // Act
         $response = $this->service->run('discover [tests.Fixtures.Models]');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
-        $this->assertStringContainsString('Found 2 Eloquent models', $response->output);
+        $this->assertStringContainsString('Found 3 Eloquent models', $response->output);
     }
 
     public function test_discover_with_scan_alias(): void
     {
-        // Arrange
         $this->resetConfig();
 
-        // Act
         $response = $this->service->run('scan [tests.Fixtures.Models]');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
-        $this->assertStringContainsString('Found 2 Eloquent models', $response->output);
+        $this->assertStringContainsString('Found 3 Eloquent models', $response->output);
     }
 
     public function test_discover_when_config_file_missing(): void
     {
-        // Arrange
         $this->resetConfig();
 
         if (File::exists($this->configPath)) {
             File::delete($this->configPath);
         }
 
-        // Act
         $response = $this->service->run('toth:discover [tests.Fixtures.Models]');
 
-        // Assert
         $this->assertSame(ExitCode::SUCCESS, $response->exit_code);
         $this->assertStringContainsString('Configuration file not found', $response->output);
         $this->assertStringContainsString('Run: php artisan vendor:publish --tag=toth-config', $response->output);

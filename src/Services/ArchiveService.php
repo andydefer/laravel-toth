@@ -15,6 +15,7 @@ use AndyDefer\LaravelToth\Tasks\BackupArchiveTask;
 use AndyDefer\LaravelToth\Tasks\RestoreArchiveTask;
 use AndyDefer\LaravelToth\Tasks\UpdateOrCreateArchiveTask;
 use AndyDefer\LaravelToth\Tasks\UpdateOrCreateFromFileTask;
+use AndyDefer\LaravelToth\Utils\ProgressManager;
 use AndyDefer\Repository\Records\FindByRecord;
 use AndyDefer\Task\Contracts\Services\UniqueTaskServiceInterface;
 use AndyDefer\Task\Models\UniqueTask;
@@ -26,18 +27,31 @@ use Illuminate\Support\Facades\File;
 
 /**
  * Service responsible for managing archives, backups, and restorations.
- *
- * This service orchestrates the entire archive lifecycle including creation,
- * backup file generation, and restoration from both database and file sources.
- * All operations are dispatched as asynchronous tasks for scalability.
  */
 final class ArchiveService implements ArchiveServiceInterface
 {
+    private bool $mute = false;
+
     public function __construct(
         private readonly TothConfigInterface $config,
         private readonly UniqueTaskServiceInterface $taskService,
         private readonly ArchiveRepository $archiveRepository,
+        private readonly ProgressManager $progress,
     ) {}
+
+    /** {@inheritDoc} */
+    public function setMute(bool $mute): self
+    {
+        $this->mute = $mute;
+
+        return $this;
+    }
+
+    /** {@inheritDoc} */
+    public function isMuted(): bool
+    {
+        return $this->mute;
+    }
 
     /** {@inheritDoc} */
     public function createOrUpdateArchive(Model $model): ?Archive
@@ -67,6 +81,32 @@ final class ArchiveService implements ArchiveServiceInterface
     public function backupFromModels(array $tables = []): void
     {
         $archivableModels = $this->config->getArchivables();
+        $totalRecords = 0;
+
+        foreach ($archivableModels as $modelClass) {
+            if (! class_exists($modelClass)) {
+                continue;
+            }
+
+            $model = new $modelClass;
+            $tableName = $model->getTable();
+
+            if ($this->shouldSkipTable($tableName, $tables)) {
+                continue;
+            }
+
+            $totalRecords += $modelClass::count();
+        }
+
+        if ($totalRecords === 0) {
+            return;
+        }
+
+        if (! $this->mute) {
+            $this->progress->start('📦 Backing up models', $totalRecords);
+        }
+
+        $processed = 0;
 
         foreach ($archivableModels as $modelClass) {
             if (! class_exists($modelClass)) {
@@ -84,7 +124,15 @@ final class ArchiveService implements ArchiveServiceInterface
 
             foreach ($records as $record) {
                 $this->createOrUpdateArchive($record);
+                $processed++;
+                if (! $this->mute) {
+                    $this->progress->update($processed, "📦 {$tableName}");
+                }
             }
+        }
+
+        if (! $this->mute) {
+            $this->progress->finish('✅ Backup completed');
         }
     }
 
@@ -98,6 +146,28 @@ final class ArchiveService implements ArchiveServiceInterface
         }
 
         $directories = File::directories($backupPath);
+        $totalFiles = 0;
+
+        foreach ($directories as $directory) {
+            $tableName = basename($directory);
+
+            if ($this->shouldSkipTable($tableName, $tables)) {
+                continue;
+            }
+
+            $files = File::files($directory);
+            $totalFiles += count($files);
+        }
+
+        if ($totalFiles === 0) {
+            return;
+        }
+
+        if (! $this->mute) {
+            $this->progress->start('📂 Restoring from files', $totalFiles);
+        }
+
+        $processed = 0;
 
         foreach ($directories as $directory) {
             $tableName = basename($directory);
@@ -111,7 +181,15 @@ final class ArchiveService implements ArchiveServiceInterface
             foreach ($files as $file) {
                 $rowId = pathinfo($file->getFilename(), PATHINFO_FILENAME);
                 $this->dispatchFileBasedArchiveTask($tableName, $rowId);
+                $processed++;
+                if (! $this->mute) {
+                    $this->progress->update($processed, "📄 {$tableName}:{$rowId}");
+                }
             }
+        }
+
+        if (! $this->mute) {
+            $this->progress->finish('✅ Files restored');
         }
     }
 
@@ -119,6 +197,40 @@ final class ArchiveService implements ArchiveServiceInterface
     public function restoreFromModels(array $tables = []): void
     {
         $archivableModels = $this->config->getArchivables();
+        $totalArchives = 0;
+
+        foreach ($archivableModels as $modelClass) {
+            if (! class_exists($modelClass)) {
+                continue;
+            }
+
+            $model = new $modelClass;
+            $tableName = $model->getTable();
+
+            if ($this->shouldSkipTable($tableName, $tables)) {
+                continue;
+            }
+
+            $archives = $this->archiveRepository->findBy(
+                FindByRecord::from([
+                    'filters' => ArchiveFiltersRecord::from([
+                        'table_name' => $tableName,
+                    ]),
+                ])
+            );
+
+            $totalArchives += $archives->count();
+        }
+
+        if ($totalArchives === 0) {
+            return;
+        }
+
+        if (! $this->mute) {
+            $this->progress->start('🔄 Restoring from database', $totalArchives);
+        }
+
+        $processed = 0;
 
         foreach ($archivableModels as $modelClass) {
             if (! class_exists($modelClass)) {
@@ -142,7 +254,15 @@ final class ArchiveService implements ArchiveServiceInterface
 
             foreach ($archives as $archive) {
                 $this->dispatchRestorationTask($archive->table_name, $archive->row_id);
+                $processed++;
+                if (! $this->mute) {
+                    $this->progress->update($processed, "♻️ {$archive->table_name}:{$archive->row_id}");
+                }
             }
+        }
+
+        if (! $this->mute) {
+            $this->progress->finish('✅ Restore completed');
         }
     }
 
@@ -156,6 +276,28 @@ final class ArchiveService implements ArchiveServiceInterface
         }
 
         $directories = File::directories($backupPath);
+        $totalFiles = 0;
+
+        foreach ($directories as $directory) {
+            $tableName = basename($directory);
+
+            if ($this->shouldSkipTable($tableName, $tables)) {
+                continue;
+            }
+
+            $files = File::files($directory);
+            $totalFiles += count($files);
+        }
+
+        if ($totalFiles === 0) {
+            return;
+        }
+
+        if (! $this->mute) {
+            $this->progress->start('📂 Restoring from files', $totalFiles);
+        }
+
+        $processed = 0;
 
         foreach ($directories as $directory) {
             $tableName = basename($directory);
@@ -169,7 +311,15 @@ final class ArchiveService implements ArchiveServiceInterface
             foreach ($files as $file) {
                 $rowId = pathinfo($file->getFilename(), PATHINFO_FILENAME);
                 $this->dispatchRestorationTask($tableName, $rowId);
+                $processed++;
+                if (! $this->mute) {
+                    $this->progress->update($processed, "📄 {$tableName}:{$rowId}");
+                }
             }
+        }
+
+        if (! $this->mute) {
+            $this->progress->finish('✅ Restore completed');
         }
     }
 
@@ -187,8 +337,6 @@ final class ArchiveService implements ArchiveServiceInterface
 
     /**
      * Cancels any pending archive creation task for the given model.
-     *
-     * Prevents duplicate tasks when the same model is updated multiple times.
      */
     private function cancelPendingArchiveTask(Model $model): void
     {

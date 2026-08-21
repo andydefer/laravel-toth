@@ -10,7 +10,7 @@ use AndyDefer\Directive\Enums\ExitCode;
 use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 use AndyDefer\DomainStructures\Utils\MapCollection;
 use AndyDefer\LaravelToth\Contracts\Configs\TothConfigInterface;
-use AndyDefer\LaravelToth\Services\ArchiveService;
+use AndyDefer\LaravelToth\Contracts\Services\ArchiveServiceInterface;
 
 /**
  * CLI command to create backups for archivable models.
@@ -22,6 +22,7 @@ use AndyDefer\LaravelToth\Services\ArchiveService;
  * bin/task toth:backup [users,posts]       // Backup only users and posts
  * bin/task toth:backup --only-db           // Backup only from database
  * bin/task toth:backup --only-files        // Backup only from storage files
+ * bin/task toth:backup --mute              // Backup without progress bars
  */
 final class TothBackupDirective extends AbstractDirective
 {
@@ -30,7 +31,8 @@ final class TothBackupDirective extends AbstractDirective
         return 'toth:backup 
                     {tables*}#"Tables to backup (e.g., users, posts)" 
                     {--only-files}#"Backup only from storage files" 
-                    {--only-db}#"Backup only from database"';
+                    {--only-db}#"Backup only from database"
+                    {--mute}#"Disable progress bars"';
     }
 
     public function getDescription(): string
@@ -50,6 +52,7 @@ final class TothBackupDirective extends AbstractDirective
         $tables = $this->getTablesFromInput();
         $onlyFiles = $this->getFlag('only-files');
         $onlyDb = $this->getFlag('only-db');
+        $mute = $this->getFlag('mute');
 
         if ($onlyFiles && $onlyDb) {
             $this->displayMutuallyExclusiveFlagsError();
@@ -57,7 +60,10 @@ final class TothBackupDirective extends AbstractDirective
             return ExitCode::INVALID_ARGUMENT;
         }
 
-        $archiveService = $this->getApplication()->make(ArchiveService::class);
+        /** @var ArchiveServiceInterface $archiveService */
+        $archiveService = $this->getApplication()->make(ArchiveServiceInterface::class);
+
+        $archiveService->setMute($mute);
 
         if ($onlyFiles) {
             $this->info('📂 Backup only from storage (files)');

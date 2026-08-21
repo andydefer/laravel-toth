@@ -10,7 +10,7 @@ use AndyDefer\Directive\Enums\ExitCode;
 use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 use AndyDefer\DomainStructures\Utils\MapCollection;
 use AndyDefer\LaravelToth\Contracts\Configs\TothConfigInterface;
-use AndyDefer\LaravelToth\Services\ArchiveService;
+use AndyDefer\LaravelToth\Contracts\Services\ArchiveServiceInterface;
 
 /**
  * CLI command to restore data from archives.
@@ -22,6 +22,7 @@ use AndyDefer\LaravelToth\Services\ArchiveService;
  * bin/task toth:restore [users,posts]       // Restore only users and posts
  * bin/task toth:restore --only-db           // Restore only from database
  * bin/task toth:restore --only-files        // Restore only from storage files
+ * bin/task toth:restore --mute              // Restore without progress bars
  */
 final class TothRestoreDirective extends AbstractDirective
 {
@@ -30,7 +31,8 @@ final class TothRestoreDirective extends AbstractDirective
         return 'toth:restore 
                     {tables*}#"Tables to restore (e.g., users, posts)" 
                     {--only-files}#"Restore only from storage files" 
-                    {--only-db}#"Restore only from database"';
+                    {--only-db}#"Restore only from database"
+                    {--mute}#"Disable progress bars"';
     }
 
     public function getDescription(): string
@@ -50,6 +52,7 @@ final class TothRestoreDirective extends AbstractDirective
         $tables = $this->getTablesFromInput();
         $onlyFiles = $this->getFlag('only-files');
         $onlyDb = $this->getFlag('only-db');
+        $mute = $this->getFlag('mute');
 
         if ($onlyFiles && $onlyDb) {
             $this->displayMutuallyExclusiveFlagsError();
@@ -57,7 +60,10 @@ final class TothRestoreDirective extends AbstractDirective
             return ExitCode::INVALID_ARGUMENT;
         }
 
-        $archiveService = $this->getApplication()->make(ArchiveService::class);
+        /** @var ArchiveServiceInterface $archiveService */
+        $archiveService = $this->getApplication()->make(ArchiveServiceInterface::class);
+
+        $archiveService->setMute($mute);
 
         if ($onlyFiles) {
             $this->info('📂 Restore only from storage (files)');

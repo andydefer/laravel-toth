@@ -2,7 +2,7 @@
 
 ## Description
 
-Commande CLI qui déclenche la restauration de données à partir des archives. Permet de filtrer par tables et de choisir la source (base de données ou fichiers de stockage).
+Commande CLI qui déclenche la restauration de données à partir des archives. Permet de filtrer par tables, de choisir la source (base de données ou fichiers de stockage) et de désactiver les barres de progression.
 
 ## Hiérarchie
 
@@ -15,11 +15,11 @@ AbstractDirective
 
 ## Rôle principal
 
-Orchestrer le processus de restauration en fonction des paramètres de l'utilisateur. La directive interroge la configuration, résout les tables à restaurer, et délègue au `ArchiveService` l'exécution des restaurations depuis la base de données ou les fichiers de stockage.
+Orchestrer le processus de restauration en fonction des paramètres de l'utilisateur. La directive interroge la configuration, résout les tables à restaurer, applique le mode `mute` si demandé, et délègue au `ArchiveService` l'exécution des restaurations depuis la base de données ou les fichiers de stockage.
 
 ## Installation
 
-Cette directive est automatiquement enregistrée lorsque le package est installé via le `LaravelTothServiceProvider`.
+Cette directive est automatiquement enregistrée via le `LaravelTothServiceProvider`.
 
 ```bash
 composer require andydefer/laravel-toth
@@ -37,7 +37,8 @@ public function getSignature(): string
     return 'toth:restore 
                 {tables*}#"Tables to restore (e.g., users, posts)" 
                 {--only-files}#"Restore only from storage files" 
-                {--only-db}#"Restore only from database"';
+                {--only-db}#"Restore only from database"
+                {--mute}#"Disable progress bars"';
 }
 ```
 
@@ -45,7 +46,7 @@ public function getSignature(): string
 
 **Exemple :**
 ```bash
-./bin/task toth:restore [users,posts] --only-db
+./bin/task toth:restore [users,posts] --only-db --mute
 ```
 
 ---
@@ -80,8 +81,8 @@ public function getAliases(): StringTypedCollection
 
 **Exemple :**
 ```bash
-./bin/task restore [users,posts]
-./bin/task rst [users,posts]
+./bin/task restore [users,posts] --mute
+./bin/task rst [users,posts] --only-files
 ```
 
 ---
@@ -94,7 +95,8 @@ Point d'entrée de la commande. Orchestre le processus de restauration.
 |-------|--------|
 | 1 | Récupère les tables depuis l'entrée utilisateur |
 | 2 | Vérifie les flags mutuellement exclusifs |
-| 3 | Délègue au `ArchiveService` la restauration appropriée |
+| 3 | Applique le mode `mute` au service |
+| 4 | Délègue au `ArchiveService` la restauration appropriée |
 
 **Retourne :** `ExitCode` - `SUCCESS` ou `INVALID_ARGUMENT`
 
@@ -121,22 +123,24 @@ $exitCode = $directive->execute();
 **Comportement :**
 1. Récupère tous les modèles de la configuration `toth.archivables`
 2. Restaure depuis la base de données ET les fichiers de stockage
+3. Affiche la barre de progression (par défaut)
 
 ---
 
-### Cas 2 : Restauration uniquement depuis la base de données
+### Cas 2 : Restauration sans barre de progression
 
-**Problème :** L'utilisateur souhaite restaurer uniquement depuis les archives en base de données.
+**Problème :** L'utilisateur souhaite une restauration silencieuse pour une exécution en cron.
 
-**Solution :** Utiliser le flag `--only-db`.
+**Solution :** Utiliser le flag `--mute`.
 
 ```bash
-./bin/task toth:restore --only-db
+./bin/task toth:restore --mute
 ```
 
 **Comportement :**
-1. Récupère tous les modèles de la configuration
-2. Restaure UNIQUEMENT depuis la base de données
+1. Toutes les barres de progression sont désactivées
+2. Les restaurations sont exécutées en arrière-plan
+3. Idéal pour les environnements de production ou les cron jobs
 
 ---
 
@@ -153,6 +157,7 @@ $exitCode = $directive->execute();
 **Comportement :**
 1. Filtre uniquement les tables `users` et `posts`
 2. Restaure UNIQUEMENT depuis les fichiers de stockage
+3. Les barres de progression sont affichées
 
 ---
 
@@ -163,9 +168,26 @@ $exitCode = $directive->execute();
 **Solution :** Utiliser l'alias `restore` ou `rst`.
 
 ```bash
-./bin/task restore [users,posts]
-./bin/task rst [users,posts]
+./bin/task restore [users,posts] --mute
+./bin/task rst [users,posts] --only-files
 ```
+
+---
+
+### Cas 5 : Restauration complète en mode silencieux
+
+**Problème :** L'utilisateur souhaite une restauration complète sans aucune sortie.
+
+**Solution :** Combiner `--mute` avec les autres flags.
+
+```bash
+./bin/task toth:restore [users,posts] --only-db --mute
+```
+
+**Comportement :**
+1. Restaure UNIQUEMENT depuis la base de données
+2. Aucune barre de progression n'est affichée
+3. Parfait pour les scripts automatisés
 
 ## Flux d'exécution
 
@@ -179,6 +201,12 @@ getTablesFromInput()
 Vérification des flags mutuellement exclusifs
     ├── --only-files ET --only-db → Erreur
     └── Sinon → continuer
+    ↓
+Récupération du ArchiveService
+    ↓
+Application du mode mute
+    ├── --mute présent → setMute(true)
+    └── Sinon → setMute(false)
     ↓
 Résolution du mode de restauration
     ├── --only-files → restoreFromFiles()
@@ -206,7 +234,8 @@ Return ExitCode::SUCCESS
 La directive utilise `ArchiveService` pour exécuter les opérations de restauration.
 
 ```php
-$archiveService = $this->getApplication()->make(ArchiveService::class);
+$archiveService = $this->getApplication()->make(ArchiveServiceInterface::class);
+$archiveService->setMute($mute);
 $archiveService->restoreFromModels($tables);
 ```
 
@@ -236,11 +265,13 @@ $this->getConsole()->raw(KeyValue::renderWithValueColor(
 |-----------|------------|--------|
 | Récupération des tables | O(n) | Dépend du nombre de modèles configurés |
 | Résolution des flags | O(1) | Négligeable |
-| Restauration | O(n) | Délégue au `ArchiveService` |
+| Restauration | O(n) | Délègue au `ArchiveService` |
+| Mode mute | O(1) | Négligeable (désactive l'affichage) |
 
 **Optimisations :**
 - Les tâches de restauration sont asynchrones (via `laravel-task`)
 - Aucune opération bloquante dans la directive
+- Le mode `mute` réduit la surcharge d'affichage
 
 ## Compatibilité
 
@@ -269,11 +300,12 @@ $app->singleton(ArchiveService::class, function () {
     return new ArchiveService(
         config: $app->make(TothConfigInterface::class),
         taskService: $app->make(UniqueTaskServiceInterface::class),
-        archiveRepository: $app->make(ArchiveRepository::class)
+        archiveRepository: $app->make(ArchiveRepository::class),
+        progress: $app->make(ProgressManager::class),
     );
 });
 
-// Exécution de la directive
+// Exécution de la directive avec mode mute
 $directive = new TothRestoreDirective();
 $exitCode = $directive->execute();
 
@@ -289,4 +321,4 @@ if ($exitCode === ExitCode::SUCCESS) {
 - `TothBackupDirective` - Commande de sauvegarde
 - `ArchiveService` - Service d'archivage et de restauration
 - `TothConfigInterface` - Interface de configuration
-- `RestoreArchiveTask` - Tâche de restauration
+- `ProgressManager` - Gestionnaire de barres de progression
