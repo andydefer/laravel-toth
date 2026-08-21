@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace AndyDefer\LaravelToth\Records;
 
 use AndyDefer\DomainStructures\Abstracts\AbstractRecord;
-use AndyDefer\LaravelCluster\ValueObjects\ClusterVO;
+use AndyDefer\DomainStructures\Utils\StrictAssociative;
 use AndyDefer\PhpVo\ValueObjects\DateTimeVO;
 
 /**
@@ -20,7 +20,7 @@ final class ArchiveRecord extends AbstractRecord
         public readonly ?string $table_name = null,
         public readonly ?string $row_id = null,
         public readonly ?string $model_class = null,
-        public readonly ?ClusterVO $data = null,
+        public readonly ?StrictAssociative $data = null,
         public readonly ?DateTimeVO $last_save_at = null,
     ) {}
 }

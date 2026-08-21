@@ -19,6 +19,7 @@ use AndyDefer\Repository\ValueObjects\SortColumns;
 use AndyDefer\Task\Contracts\Services\UniqueTaskServiceInterface;
 use AndyDefer\Task\Directives\TasksProcessDirective;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 final class ArchiveServiceTest extends IntegrationTestCase
@@ -126,6 +127,7 @@ final class ArchiveServiceTest extends IntegrationTestCase
         $this->archiveService->createOrUpdateArchive($user);
 
         $this->runTasks();
+        $archiveRaw = DB::table('archives')->where('id', 1)->first();
 
         $filters = ArchiveFiltersRecord::from([
             'table_name' => 'test_users',
