@@ -1,7 +1,5 @@
 <?php
 
-// src/Services/ArchiveService.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\LaravelToth\Services;
@@ -16,6 +14,7 @@ use AndyDefer\LaravelToth\Repositories\ArchiveRepository;
 use AndyDefer\LaravelToth\Tasks\BackupArchiveTask;
 use AndyDefer\LaravelToth\Tasks\RestoreArchiveTask;
 use AndyDefer\LaravelToth\Tasks\UpdateOrCreateArchiveTask;
+use AndyDefer\LaravelToth\Tasks\UpdateOrCreateFromFileTask;
 use AndyDefer\Repository\Records\FindByRecord;
 use AndyDefer\Task\Contracts\Services\UniqueTaskServiceInterface;
 use AndyDefer\Task\Models\UniqueTask;
@@ -25,18 +24,26 @@ use AndyDefer\Task\ValueObjects\UniqueTaskFqcnVO;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\File;
 
+/**
+ * Service responsible for managing archives, backups, and restorations.
+ *
+ * This service orchestrates the entire archive lifecycle including creation,
+ * backup file generation, and restoration from both database and file sources.
+ * All operations are dispatched as asynchronous tasks for scalability.
+ */
 final class ArchiveService implements ArchiveServiceInterface
 {
     public function __construct(
         private readonly TothConfigInterface $config,
         private readonly UniqueTaskServiceInterface $taskService,
-        private readonly ArchiveRepository $archiveRepository
+        private readonly ArchiveRepository $archiveRepository,
     ) {}
 
+    /** {@inheritDoc} */
     public function createOrUpdateArchive(Model $model): ?Archive
     {
-        $this->cancelExistingTask($model);
-        $this->dispatchUpdateOrCreateTask($model);
+        $this->cancelPendingArchiveTask($model);
+        $this->dispatchArchiveCreationTask($model);
 
         $filters = ArchiveFiltersRecord::from([
             'table_name' => $model->getTable(),
@@ -45,23 +52,23 @@ final class ArchiveService implements ArchiveServiceInterface
         ]);
 
         return $this->archiveRepository->findBy(
-            FindByRecord::from([
-                'filters' => $filters,
-            ])
+            FindByRecord::from(['filters' => $filters])
         )->first();
     }
 
+    /** {@inheritDoc} */
     public function backup(Archive $archive): void
     {
-        $this->cancelExistingBackupTask($archive);
+        $this->cancelPendingBackupTask($archive);
         $this->dispatchBackupTask($archive);
     }
 
+    /** {@inheritDoc} */
     public function backupFromModels(array $tables = []): void
     {
-        $archivables = $this->config->getArchivables();
+        $archivableModels = $this->config->getArchivables();
 
-        foreach ($archivables as $modelClass) {
+        foreach ($archivableModels as $modelClass) {
             if (! class_exists($modelClass)) {
                 continue;
             }
@@ -69,7 +76,7 @@ final class ArchiveService implements ArchiveServiceInterface
             $model = new $modelClass;
             $tableName = $model->getTable();
 
-            if (! empty($tables) && ! in_array($tableName, $tables)) {
+            if ($this->shouldSkipTable($tableName, $tables)) {
                 continue;
             }
 
@@ -81,6 +88,7 @@ final class ArchiveService implements ArchiveServiceInterface
         }
     }
 
+    /** {@inheritDoc} */
     public function backupFromFiles(array $tables = []): void
     {
         $backupPath = $this->config->getBackupFolderPath();
@@ -94,7 +102,7 @@ final class ArchiveService implements ArchiveServiceInterface
         foreach ($directories as $directory) {
             $tableName = basename($directory);
 
-            if (! empty($tables) && ! in_array($tableName, $tables)) {
+            if ($this->shouldSkipTable($tableName, $tables)) {
                 continue;
             }
 
@@ -102,16 +110,17 @@ final class ArchiveService implements ArchiveServiceInterface
 
             foreach ($files as $file) {
                 $rowId = pathinfo($file->getFilename(), PATHINFO_FILENAME);
-                $this->createOrUpdateArchiveFromFile($tableName, $rowId);
+                $this->dispatchFileBasedArchiveTask($tableName, $rowId);
             }
         }
     }
 
+    /** {@inheritDoc} */
     public function restoreFromModels(array $tables = []): void
     {
-        $archivables = $this->config->getArchivables();
+        $archivableModels = $this->config->getArchivables();
 
-        foreach ($archivables as $modelClass) {
+        foreach ($archivableModels as $modelClass) {
             if (! class_exists($modelClass)) {
                 continue;
             }
@@ -119,7 +128,7 @@ final class ArchiveService implements ArchiveServiceInterface
             $model = new $modelClass;
             $tableName = $model->getTable();
 
-            if (! empty($tables) && ! in_array($tableName, $tables)) {
+            if ($this->shouldSkipTable($tableName, $tables)) {
                 continue;
             }
 
@@ -132,14 +141,12 @@ final class ArchiveService implements ArchiveServiceInterface
             );
 
             foreach ($archives as $archive) {
-                $this->dispatchRestoreTask(
-                    $archive->table_name,
-                    $archive->row_id
-                );
+                $this->dispatchRestorationTask($archive->table_name, $archive->row_id);
             }
         }
     }
 
+    /** {@inheritDoc} */
     public function restoreFromFiles(array $tables = []): void
     {
         $backupPath = $this->config->getBackupFolderPath();
@@ -153,7 +160,7 @@ final class ArchiveService implements ArchiveServiceInterface
         foreach ($directories as $directory) {
             $tableName = basename($directory);
 
-            if (! empty($tables) && ! in_array($tableName, $tables)) {
+            if ($this->shouldSkipTable($tableName, $tables)) {
                 continue;
             }
 
@@ -161,50 +168,29 @@ final class ArchiveService implements ArchiveServiceInterface
 
             foreach ($files as $file) {
                 $rowId = pathinfo($file->getFilename(), PATHINFO_FILENAME);
-                $this->dispatchRestoreTask($tableName, $rowId);
+                $this->dispatchRestorationTask($tableName, $rowId);
             }
         }
     }
 
+    /** {@inheritDoc} */
     public function registerObservers(): void
     {
-        $archivables = $this->config->getArchivables();
+        $archivableModels = $this->config->getArchivables();
 
-        foreach ($archivables as $modelClass) {
+        foreach ($archivableModels as $modelClass) {
             if (class_exists($modelClass)) {
                 $modelClass::observe(ArchivableObserver::class);
             }
         }
     }
 
-    private function createOrUpdateArchiveFromFile(string $tableName, string $rowId): void
-    {
-        $backupPath = $this->config->getBackupFolderPath();
-        $filePath = $backupPath.'/'.$tableName.'/'.$rowId.'.php';
-
-        if (! File::exists($filePath)) {
-            return;
-        }
-
-        $data = require $filePath;
-
-        if (empty($data)) {
-            return;
-        }
-
-        Archive::updateOrCreate(
-            [
-                'table_name' => $tableName,
-                'row_id' => $rowId,
-            ],
-            [
-                'data' => $data,
-                'last_save_at' => now(),
-            ]
-        );
-    }
-
-    protected function cancelExistingTask(Model $model): void
+    /**
+     * Cancels any pending archive creation task for the given model.
+     *
+     * Prevents duplicate tasks when the same model is updated multiple times.
+     */
+    private function cancelPendingArchiveTask(Model $model): void
     {
         $task = UniqueTask::whereIn('status', ['pending', 'in_progress'])
             ->where('fqcn', UpdateOrCreateArchiveTask::class)
@@ -220,7 +206,10 @@ final class ArchiveService implements ArchiveServiceInterface
         }
     }
 
-    protected function cancelExistingBackupTask(Archive $archive): void
+    /**
+     * Cancels any pending backup task for the given archive.
+     */
+    private function cancelPendingBackupTask(Archive $archive): void
     {
         $task = UniqueTask::whereIn('status', ['pending', 'in_progress'])
             ->where('fqcn', BackupArchiveTask::class)
@@ -235,7 +224,10 @@ final class ArchiveService implements ArchiveServiceInterface
         }
     }
 
-    private function dispatchUpdateOrCreateTask(Model $model): void
+    /**
+     * Dispatches a task to create or update an archive for a model.
+     */
+    private function dispatchArchiveCreationTask(Model $model): void
     {
         $payload = StrictDataObject::from([
             'model_class' => get_class($model),
@@ -245,14 +237,13 @@ final class ArchiveService implements ArchiveServiceInterface
         $this->taskService->register(
             new UniqueTaskFqcnVO(UpdateOrCreateArchiveTask::class),
             $payload,
-            UniqueTaskConfigRecord::from([
-                'scheduled_at' => now()->addSeconds(5)->toIso8601String(),
-                'max_attempts' => 3,
-                'grace_period' => 60,
-            ])
+            $this->createTaskConfig('Update or create archive task')
         );
     }
 
+    /**
+     * Dispatches a task to create a backup file for an archive.
+     */
     private function dispatchBackupTask(Archive $archive): void
     {
         $payload = StrictDataObject::from([
@@ -262,15 +253,14 @@ final class ArchiveService implements ArchiveServiceInterface
         $this->taskService->register(
             new UniqueTaskFqcnVO(BackupArchiveTask::class),
             $payload,
-            UniqueTaskConfigRecord::from([
-                'scheduled_at' => now()->addSeconds(5)->toIso8601String(),
-                'max_attempts' => 3,
-                'grace_period' => 60,
-            ])
+            $this->createTaskConfig('Backup archive task')
         );
     }
 
-    private function dispatchRestoreTask(string $tableName, string $rowId): void
+    /**
+     * Dispatches a task to restore a model from an archive.
+     */
+    private function dispatchRestorationTask(string $tableName, string $rowId): void
     {
         $payload = StrictDataObject::from([
             'table_name' => $tableName,
@@ -280,11 +270,45 @@ final class ArchiveService implements ArchiveServiceInterface
         $this->taskService->register(
             new UniqueTaskFqcnVO(RestoreArchiveTask::class),
             $payload,
-            UniqueTaskConfigRecord::from([
-                'scheduled_at' => now()->addSeconds(5)->toIso8601String(),
-                'max_attempts' => 3,
-                'grace_period' => 60,
-            ])
+            $this->createTaskConfig('Restore archive task')
         );
+    }
+
+    /**
+     * Dispatches a task to create an archive from a backup file.
+     */
+    private function dispatchFileBasedArchiveTask(string $tableName, string $rowId): void
+    {
+        $payload = StrictDataObject::from([
+            'table_name' => $tableName,
+            'row_id' => $rowId,
+        ]);
+
+        $this->taskService->register(
+            new UniqueTaskFqcnVO(UpdateOrCreateFromFileTask::class),
+            $payload,
+            $this->createTaskConfig('Update or create archive from file task')
+        );
+    }
+
+    /**
+     * Determines whether a table should be skipped based on the filter.
+     */
+    private function shouldSkipTable(string $tableName, array $allowedTables): bool
+    {
+        return ! empty($allowedTables) && ! in_array($tableName, $allowedTables, true);
+    }
+
+    /**
+     * Creates a task configuration with values from the package configuration.
+     */
+    private function createTaskConfig(string $description): UniqueTaskConfigRecord
+    {
+        return UniqueTaskConfigRecord::from([
+            'scheduled_at' => now()->addSeconds($this->config->getTaskDelaySeconds())->toIso8601String(),
+            'max_attempts' => $this->config->getMaxAttempts(),
+            'grace_period' => $this->config->getGracePeriodSeconds(),
+            'description' => $description,
+        ]);
     }
 }

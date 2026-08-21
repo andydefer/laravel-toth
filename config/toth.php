@@ -25,4 +25,37 @@ return [
     |
     */
     'backup_folder_path' => storage_path('toth/backups'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Task Delay Seconds
+    |--------------------------------------------------------------------------
+    |
+    | Delay in seconds before a task is executed. This delay allows for
+    | cancellation of duplicate tasks when multiple updates occur in quick
+    | succession.
+    |
+    */
+    'task_delay_seconds' => 5,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Max Attempts
+    |--------------------------------------------------------------------------
+    |
+    | Maximum number of attempts for a task before it is marked as failed.
+    |
+    */
+    'max_attempts' => 3,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Grace Period Seconds
+    |--------------------------------------------------------------------------
+    |
+    | Grace period in seconds before a task is considered expired and can be
+    | cleaned up.
+    |
+    */
+    'grace_period_seconds' => 60,
 ];

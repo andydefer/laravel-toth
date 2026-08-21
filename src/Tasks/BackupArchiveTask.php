@@ -1,17 +1,22 @@
 <?php
 
-// src/Tasks/BackupArchiveTask.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\LaravelToth\Tasks;
 
-use AndyDefer\LaravelToth\Contracts\Configs\TothConfigInterface;
+use AndyDefer\LaravelToth\Helpers\BackupFileHelper;
 use AndyDefer\LaravelToth\Repositories\ArchiveRepository;
 use AndyDefer\Task\Abstract\AbstractUniqueTask;
 use AndyDefer\Task\ValueObjects\DescriptionVO;
-use Illuminate\Support\Facades\File;
+use RuntimeException;
 
+/**
+ * Task that creates a physical backup file for a given archive.
+ *
+ * This task is dispatched asynchronously to generate a PHP file containing
+ * the archived data. The backup file is stored in the configured backup
+ * directory and can be used for restoration purposes.
+ */
 final class BackupArchiveTask extends AbstractUniqueTask
 {
     protected function process(): void
@@ -20,32 +25,16 @@ final class BackupArchiveTask extends AbstractUniqueTask
         $archiveId = $payload->archive_id;
 
         $archiveRepository = $this->context->getLaravelApp()->make(ArchiveRepository::class);
-        $config = $this->context->getLaravelApp()->make(TothConfigInterface::class);
+        $backupHelper = $this->context->getLaravelApp()->make(BackupFileHelper::class);
 
         $archive = $archiveRepository->find($archiveId);
 
         if (! $archive) {
             $this->error(new DescriptionVO("Archive not found: ID {$archiveId}"));
-
-            return;
+            throw new RuntimeException("Archive not found: ID {$archiveId}");
         }
 
-        $backupPath = $config->getBackupFolderPath();
-        $tableName = $archive->table_name;
-        $rowId = $archive->row_id;
-
-        $directory = $backupPath.'/'.$tableName;
-
-        if (! File::exists($directory)) {
-            File::makeDirectory($directory, 0755, true);
-        }
-
-        $filePath = $directory.'/'.$rowId.'.php';
-
-        $content = '<?php'.PHP_EOL.PHP_EOL;
-        $content .= 'return '.var_export($archive->data, true).';'.PHP_EOL;
-
-        File::put($filePath, $content);
+        $filePath = $backupHelper->createBackupFile($archive);
 
         $this->info(new DescriptionVO("Backup created for archive {$archiveId} at {$filePath}"));
     }

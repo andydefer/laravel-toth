@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace AndyDefer\LaravelToth\Tests;
 
+use AndyDefer\Directive\DirectiveServiceProvider;
 use AndyDefer\LaravelToth\LaravelTothServiceProvider;
+use AndyDefer\Task\TaskServiceProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 abstract class IntegrationTestCase extends Orchestra
 {
+    use RefreshDatabase;
+
     protected string $databasePath;
 
     protected function stripAnsi(string $text): string
@@ -24,6 +29,8 @@ abstract class IntegrationTestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
+            DirectiveServiceProvider::class,
+            TaskServiceProvider::class,
             LaravelTothServiceProvider::class,
         ];
     }
@@ -44,9 +51,15 @@ abstract class IntegrationTestCase extends Orchestra
 
     protected function runMigrations(): void
     {
-        $fixtureMigrations = __DIR__.'/Fixtures/migrations';
-        if (is_dir($fixtureMigrations)) {
-            $this->loadMigrationsFrom($fixtureMigrations);
+        $migrationPaths = [
+            __DIR__.'/Fixtures/migrations',
+            __DIR__.'/../database/migrations',
+        ];
+
+        foreach ($migrationPaths as $path) {
+            if (is_dir($path)) {
+                $this->loadMigrationsFrom($path);
+            }
         }
     }
 
