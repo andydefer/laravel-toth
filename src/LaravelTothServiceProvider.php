@@ -7,10 +7,12 @@ namespace AndyDefer\LaravelToth;
 use AndyDefer\LaravelToth\Configs\TothConfig;
 use AndyDefer\LaravelToth\Contracts\Configs\TothConfigInterface;
 use AndyDefer\LaravelToth\Contracts\Services\ArchiveServiceInterface;
+use AndyDefer\LaravelToth\Contracts\Services\DiscoveryServiceInterface;
 use AndyDefer\LaravelToth\Models\Archive;
 use AndyDefer\LaravelToth\Observers\ArchiveObserver;
 use AndyDefer\LaravelToth\Repositories\ArchiveRepository;
 use AndyDefer\LaravelToth\Services\ArchiveService;
+use AndyDefer\LaravelToth\Services\DiscoveryService;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -51,16 +53,26 @@ final class LaravelTothServiceProvider extends ServiceProvider
      */
     private function registerServices(): void
     {
+
+        // Discovery Service
+        $this->app->singleton(
+            DiscoveryServiceInterface::class,
+            DiscoveryService::class,
+        );
+
+        // Toth Config
         $this->app->singleton(
             TothConfigInterface::class,
             TothConfig::class,
         );
 
+        // Archive Repository
         $this->app->singleton(
             ArchiveRepository::class,
             ArchiveRepository::class,
         );
 
+        // Archive Service
         $this->app->singleton(
             ArchiveServiceInterface::class,
             ArchiveService::class,

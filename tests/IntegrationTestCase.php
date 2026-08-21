@@ -35,12 +35,22 @@ abstract class IntegrationTestCase extends Orchestra
         ];
     }
 
-    protected function defineEnvironment($app): void {}
+    protected function defineEnvironment($app): void
+    {
+        $app['config']->set('toth.archivables', []);
+        $app['config']->set('toth.backup_folder_path', storage_path('toth/backups_test'));
+    }
 
     protected function setUp(): void
     {
-        parent::setUp();
-        $this->runMigrations();
+        try {
+            // code...
+            parent::setUp();
+            $this->runMigrations();
+        } catch (\Throwable $th) {
+            dd($th);
+            // throw $th;
+        }
     }
 
     protected function tearDown(): void

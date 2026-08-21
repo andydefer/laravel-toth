@@ -3,6 +3,8 @@
 // config/toth.php
 
 declare(strict_types=1);
+use AndyDefer\LaravelToth\Tests\Fixtures\Models\TestProduct;
+use AndyDefer\LaravelToth\Tests\Fixtures\Models\TestUser;
 
 return [
     /*
@@ -14,7 +16,10 @@ return [
     | Add any model you want to track changes for.
     |
     */
-    'archivables' => [],
+    'archivables' => [
+        TestProduct::class,
+        TestUser::class,
+    ],
 
     /*
     |--------------------------------------------------------------------------

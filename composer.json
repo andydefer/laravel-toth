@@ -1,6 +1,6 @@
 {
     "name": "andydefer/laravel-toth",
-    "description": "Headless authentication kit for Laravel built on Nemesis and Laravel Actions",
+    "description": "Toth is a Laravel package for database backup and snapshot management with asynchronous task-based architecture.",
     "type": "library",
     "license": "MIT",
     "authors": [
