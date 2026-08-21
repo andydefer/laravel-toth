@@ -155,10 +155,26 @@ La commande scanne les dossiers spécifiés, analyse les fichiers PHP via l'AST 
 # Sauvegarde uniquement depuis les fichiers de stockage
 ./bin/task toth:backup --only-files
 
+# Désactiver les barres de progression
+./bin/task toth:backup --mute
+
 # Utilisation des alias
 ./bin/task backup [users,posts]
 ./bin/task bkp [users,posts]
 ```
+
+### Barres de progression
+
+Les opérations de sauvegarde et de restauration affichent des barres de progression interactives :
+
+```
+📦 Backing up models...
+[████████████████████████░░░░░░░░░░░░] 60%
+   📦 users
+   150 / 250
+```
+
+Le flag `--mute` permet de les désactiver pour les environnements de production ou les cron jobs.
 
 ### Via le service
 
@@ -193,6 +209,14 @@ class UserController extends Controller
         // ✅ Recrée les archives depuis les fichiers
         $this->archiveService->backupFromFiles();
     }
+
+    public function backupWithMute(): void
+    {
+        // ✅ Sauvegarde sans barres de progression
+        $this->archiveService->setMute(true);
+        $this->archiveService->backupFromModels();
+        $this->archiveService->setMute(false);
+    }
 }
 ```
 
@@ -214,6 +238,9 @@ class UserController extends Controller
 
 # Restauration uniquement depuis les fichiers de stockage
 ./bin/task toth:restore --only-files
+
+# Désactiver les barres de progression
+./bin/task toth:restore --mute
 
 # Utilisation des alias
 ./bin/task restore [users,posts]
@@ -246,6 +273,14 @@ class UserController extends Controller
     {
         // ✅ Restauration depuis les fichiers de backup
         $this->archiveService->restoreFromFiles();
+    }
+
+    public function restoreWithMute(): void
+    {
+        // ✅ Restauration sans barres de progression
+        $this->archiveService->setMute(true);
+        $this->archiveService->restoreFromModels();
+        $this->archiveService->setMute(false);
     }
 }
 ```
@@ -507,10 +542,10 @@ class BackupArchiveTask extends AbstractUniqueTask
 * * * * * cd /var/www/project && ./bin/task tasks:watch 30 --mute >> /var/log/toth-watch.log 2>&1
 
 # Backup complet toutes les heures
-0 * * * * cd /var/www/project && ./bin/task toth:backup >> /var/log/toth-backup.log 2>&1
+0 * * * * cd /var/www/project && ./bin/task toth:backup --mute >> /var/log/toth-backup.log 2>&1
 
 # Backup depuis les fichiers (pour resynchronisation)
-0 2 * * * cd /var/www/project && ./bin/task toth:backup --only-files >> /var/log/toth-backup-files.log 2>&1
+0 2 * * * cd /var/www/project && ./bin/task toth:backup --only-files --mute >> /var/log/toth-backup-files.log 2>&1
 ```
 
 ---
@@ -525,6 +560,7 @@ class BackupArchiveTask extends AbstractUniqueTask
 | `./bin/task toth:backup [users,posts]` | Sauvegarde uniquement les tables spécifiées |
 | `./bin/task toth:backup --only-db` | Sauvegarde uniquement depuis la base de données |
 | `./bin/task toth:backup --only-files` | Sauvegarde uniquement depuis les fichiers |
+| `./bin/task toth:backup --mute` | Sauvegarde sans barres de progression |
 | `./bin/task backup` | Alias de la commande |
 | `./bin/task bkp` | Alias court |
 
@@ -536,6 +572,7 @@ class BackupArchiveTask extends AbstractUniqueTask
 | `./bin/task toth:restore [users,posts]` | Restauration uniquement les tables spécifiées |
 | `./bin/task toth:restore --only-db` | Restauration uniquement depuis la base de données |
 | `./bin/task toth:restore --only-files` | Restauration uniquement depuis les fichiers |
+| `./bin/task toth:restore --mute` | Restauration sans barres de progression |
 | `./bin/task restore` | Alias de la commande |
 | `./bin/task rst` | Alias court |
 
@@ -602,6 +639,14 @@ find storage/toth/backups/ -type f -mtime +30 -delete
 ```bash
 # Découvrir automatiquement tous les modèles
 ./bin/task toth:discover
+```
+
+### ✅ Utiliser le flag `--mute` pour les cron jobs
+
+```bash
+# En production, désactiver les barres de progression
+./bin/task toth:backup --mute
+./bin/task toth:restore --mute
 ```
 
 ---
