@@ -46,19 +46,6 @@ php artisan migrate
 
 **La solution :** Laravel Toth. Un système d'archivage et de sauvegarde qui capture automatiquement l'état de vos modèles, stocke les données en base de données ET en fichiers, et permet de restaurer en un clic.
 
-### Comparatif rapide
-
-| Besoin | Backup DB | Soft Delete | Laravel Toth |
-|--------|-----------|-------------|--------------|
-| Capture l'état complet d'un modèle | ❌ | ❌ | ✅ |
-| Historique des modifications | ❌ | ❌ | ✅ |
-| Restauration avec ID original | ❌ | ❌ | ✅ |
-| Sauvegarde en base ET en fichiers | ❌ | ❌ | ✅ |
-| Asynchrone (ne bloque pas) | ❌ | ❌ | ✅ |
-| Fonctionne avec UUID | ❌ | ❌ | ✅ |
-| Automatique sur create/update/delete | ❌ | ❌ | ✅ |
-| Découverte automatique des modèles | ❌ | ❌ | ✅ |
-
 ---
 
 ## Architecture et concepts clés
@@ -66,51 +53,6 @@ php artisan migrate
 ### Le noyau
 
 Le package s'appuie sur **Laravel Directive** pour les commandes CLI et **Laravel Task** pour l'exécution asynchrone. Il utilise un **service central** (`ArchiveService`) qui orchestre toutes les opérations.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Application Laravel                    │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │              ArchiveService                         │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │    │
-│  │  │ createOrUpd. │  │   backup     │  │ restore   │  │    │
-│  │  └──────────────┘  └──────────────┘  └───────────┘  │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                          │                                  │
-│  ┌───────────────────────▼─────────────────────────────┐    │
-│  │           Tâches asynchrones (laravel-task)         │    │
-│  │  ┌──────────────────┐  ┌──────────────────────────┐ │    │
-│  │  │UpdateOrCreateArc.│  │    BackupArchiveTask     │ │    │
-│  │  └──────────────────┘  └──────────────────────────┘ │    │
-│  │  ┌──────────────────┐  ┌──────────────────────────┐ │    │
-│  │  │ RestoreArchive   │  │ UpdateOrCreateFromFile   │ │    │
-│  │  └──────────────────┘  └──────────────────────────┘ │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                          │                                  │
-│  ┌───────────────────────▼─────────────────────────────┐    │
-│  │              BackupFileHelper                       │    │
-│  │        (Création des fichiers .php)                 │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │              Base de données                        │    │
-│  │              Table : archives                       │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Les composants clés :**
-
-| Composant | Description |
-|-----------|-------------|
-| `ArchiveService` | Service central orchestrant toutes les opérations |
-| `Archive` | Modèle Eloquent représentant une archive |
-| `ArchiveRepository` | Repository pour les opérations CRUD sur les archives |
-| `BackupFileHelper` | Helper pour la création de fichiers de backup |
-| `TothBackupDirective` | Commande CLI pour créer des sauvegardes |
-| `TothRestoreDirective` | Commande CLI pour restaurer des données |
-| `TothDiscoveryDirective` | Commande CLI pour découvrir automatiquement les modèles |
 
 ---
 
