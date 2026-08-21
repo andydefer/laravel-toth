@@ -1,4 +1,3 @@
-```markdown
 # Laravel Toth
 
 **Un moteur de sauvegarde et d'archivage pour Laravel. Sauvegarde automatique, restauration, snapshots - avec un simple cron.**
@@ -668,4 +667,3 @@ find storage/toth/backups/ -type f -mtime +30 -delete
 ## Licence
 
 MIT © [Andy Defer](https://github.com/andydefer)
-```
