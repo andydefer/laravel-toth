@@ -14,18 +14,15 @@ return new class extends Migration
     {
         Schema::create('archives', function (Blueprint $table) {
             $table->id();
-            $table->string('table_name', 255);
-            $table->unsignedBigInteger('row_id');
+            $table->string('table_name');
+            $table->string('row_id');
+            $table->string('model_class');
             $table->json('data');
             $table->timestamp('last_save_at');
             $table->timestamps();
 
-            // Index pour recherches rapides
-            $table->index(['table_name', 'row_id'], 'idx_table_row');
-            $table->index('last_save_at', 'idx_last_save');
-
-            // Index composite pour les requêtes fréquentes
-            $table->index(['table_name', 'row_id', 'last_save_at'], 'idx_table_row_date');
+            $table->index(['table_name', 'row_id']);
+            $table->index('model_class');
         });
     }
 

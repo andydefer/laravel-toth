@@ -13,13 +13,13 @@ class Archive extends Model
     protected $fillable = [
         'table_name',
         'row_id',
+        'model_class',
         'data',
         'last_save_at',
     ];
 
     protected $casts = [
         'data' => 'array',
-        'row_id' => 'integer',
         'last_save_at' => 'datetime',
     ];
 }
