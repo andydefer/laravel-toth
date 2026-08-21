@@ -8,6 +8,7 @@ use AndyDefer\LaravelToth\Helpers\BackupFileHelper;
 use AndyDefer\LaravelToth\Repositories\ArchiveRepository;
 use AndyDefer\Task\Abstract\AbstractUniqueTask;
 use AndyDefer\Task\ValueObjects\DescriptionVO;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -36,6 +37,17 @@ final class UpdateOrCreateArchiveTask extends AbstractUniqueTask
         $archiveRepository = $this->context->getLaravelApp()->make(ArchiveRepository::class);
         $backupHelper = $this->context->getLaravelApp()->make(BackupFileHelper::class);
 
+        // Récupérer toutes les colonnes brutes de la table
+        $rawData = DB::table($model->getTable())->where($model->getKeyName(), $model->getKey())->first();
+
+        if (! $rawData) {
+            $this->error(new DescriptionVO("Failed to fetch raw data for {$modelClass}:{$modelId}"));
+            throw new RuntimeException("Failed to fetch raw data for {$modelClass}:{$modelId}");
+        }
+
+        // Convertir en tableau et retirer la clé primaire si elle est auto-incrémentée
+        $data = (array) $rawData;
+
         $archive = $archiveRepository->updateOrCreate(
             [
                 'table_name' => $model->getTable(),
@@ -43,7 +55,7 @@ final class UpdateOrCreateArchiveTask extends AbstractUniqueTask
                 'model_class' => get_class($model),
             ],
             [
-                'data' => $model->toArray(),
+                'data' => $data,
                 'last_save_at' => now()->toIso8601String(),
             ]
         );
