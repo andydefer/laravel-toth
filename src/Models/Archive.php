@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace AndyDefer\LaravelToth\Models;
 
 use AndyDefer\DomainStructures\Utils\StrictAssociative;
-use AndyDefer\LaravelUtils\Proxies\AttributeProxy;
+use AndyDefer\Repository\Proxies\AttributeProxy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
