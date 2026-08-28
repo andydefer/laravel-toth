@@ -11,7 +11,7 @@
     ],
     "require": {
         "php": "^8.1",
-        "andydefer/laravel-task": "^4.13.20"
+        "andydefer/laravel-task": "^4.13.21"
     },
     "require-dev": {
         "orchestra/testbench": "^9.0|^10.0",
